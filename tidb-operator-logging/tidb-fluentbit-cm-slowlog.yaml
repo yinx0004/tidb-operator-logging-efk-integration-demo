@@ -1,0 +1,62 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  namespace: tidb-cluster
+  name: tidb-fluentbit
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        flush        1
+        Daemon       off
+        log_level    trace
+        parsers_file parsers_multiline.conf
+
+    [INPUT]
+        Name  tail
+        Path  /var/log/tidb/*
+        Tag   tidb
+        Read_from_Head  True
+        multiline.parser multiline-regex-slowlog
+
+    [FILTER]
+        Name record_modifier
+        Match *
+        Record pod ${HOSTNAME}
+        Record tidb ${ADVANCED_TEST_TIDB_PORT_10080_TCP}
+
+    [OUTPUT]
+        Name  es
+        Match  *
+        Host  quickstart-es-http.eck
+        Port  9200
+        Index  tidb
+        tls  On
+        tls.verify  Off
+        HTTP_User  elastic
+        HTTP_Passwd  12667swmP7CB86GFHHTVd79s
+        Logstash_Format  On
+        Logstash_Prefix  tidb
+        Suppress_Type_Name  On
+
+    [OUTPUT]
+        name  stdout
+        match   *
+
+  parsers_multiline.conf: |
+    [MULTILINE_PARSER]
+        name          multiline-regex-slowlog
+        type          regex
+        flush_timeout 1000
+        # Regex rules for multiline parsing
+        # ---------------------------------
+        #
+        # configuration hints:
+        #
+        #  - first state always has the name: start_state
+        #  - every field in the rule must be inside double quotes
+        #
+        # rules   |   state name   | regex pattern                                    | next state name
+        # --------|----------------|--------------------------------------------------|----------------
+        rule         "start_state"   "/# Time: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.*/"  "cont"
+        rule         "cont"          "/# (?!Time: )/"                                   "cont"
+        rule         "cont"          "/^(?!#)/"                                         "cont"

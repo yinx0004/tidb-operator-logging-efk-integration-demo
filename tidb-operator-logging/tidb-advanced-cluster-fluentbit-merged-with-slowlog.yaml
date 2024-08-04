@@ -1,0 +1,58 @@
+apiVersion: pingcap.com/v1alpha1
+kind: TidbCluster
+metadata:
+  name: advanced-test
+  namespace: tidb-cluster
+spec:
+  version: "v7.5.0"
+  timezone: UTC
+  configUpdateStrategy: RollingUpdate
+  #helper:
+  #  image: alpine:3.16.0
+  #  imagePullPolicy: IfNotPresent
+  pvReclaimPolicy: Retain
+  enableDynamicConfiguration: true
+  pd:
+    baseImage: pingcap/pd
+    config: |
+      [dashboard]
+        internal-proxy = true
+    replicas: 1
+    maxFailoverCount: 0
+    requests:
+      storage: 1Gi
+    mountClusterClientSecret: true
+  tidb:
+    baseImage: pingcap/tidb
+    config: |
+      [performance]
+        tcp-keep-alive = true
+      [log]
+        slow-threshold = 0
+    replicas: 1
+    maxFailoverCount: 0
+    service:
+      type: ClusterIP
+    additionalContainers:
+    - name: slowlog
+      image: fluent/fluent-bit:1.8
+      imagePullPolicy: IfNotPresent
+      command: ['/fluent-bit/bin/fluent-bit', '-c', '/fluent-bit/etc/fluent-bit.conf']
+      volumeMounts:
+        - name: slowlog
+          mountPath: /var/log/tidb
+        - name: fluent-bit-config
+          mountPath: /fluent-bit/etc/
+    additionalVolumes:
+    - name: fluent-bit-config
+      configMap:
+        name: tidb-fluentbit
+  tikv:
+    baseImage: pingcap/tikv
+    config: |
+      log-level = "info"
+    replicas: 1
+    maxFailoverCount: 0
+    requests:
+      storage: 5Gi
+    mountClusterClientSecret: true
